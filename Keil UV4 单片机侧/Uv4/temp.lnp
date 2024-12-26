@@ -1,0 +1,9 @@
+"STARTUP.obj",
+"delay.obj",
+"ds18b20.obj",
+"key.obj",
+"lcd1602.obj",
+"main.obj",
+"uart.obj" 
+TO "temp" 
+RAMSIZE(256) 

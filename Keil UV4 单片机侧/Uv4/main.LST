@@ -1,0 +1,306 @@
+C51 COMPILER V9.56.0.0   MAIN                                                              12/16/2024 19:35:41 PAGE 1   
+
+
+C51 COMPILER V9.56.0.0, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN main.OBJ
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.EXE main.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND TABS(2)
+
+line level    source
+
+   1          #include <reg52.h>
+   2          #include "key.h"
+   3          #include "lcd1602.h"
+   4          #include "ds18b20.h"
+   5          #include "uart.h"
+   6          
+   7          sbit beep = P2^3;
+   8          
+   9          char code dig[]={'0','1','2','3','4','5','6','7','8','9'};//数字字符数组
+  10          char code mainPage1[] = "Temperature";    
+  11          char code mainPage2[] = "C";  
+  12          char code LoSet[] = "Lo Set:";
+  13          char code HiSet[] = "Hi Set:";
+  14          
+  15          char strBuf[6];   //1602显示数据缓存
+  16          uchar uartArry[7];
+  17          
+  18          int LoLV = 200;   //低限
+  19          int HiLV = 800;   //高限
+  20          int temp = 0;   //实时温度
+  21          
+  22          char selectIdx;   //切换选择
+  23          char digIdx;    //选择的位
+  24          uint cycleCount;  //循环周期
+  25          char taskIdx;   //任务序号
+  26          
+  27          void task_handle(void);
+  28          void key_handle(uchar value);//按键处理函数
+  29          void temp_ctrl(void);
+  30          void value_deal(int num);
+  31          
+  32          void main()
+  33          {
+  34   1        lcd1602_init();   //初始化液晶
+  35   1        uart_init();    //串口初始化
+  36   1      
+  37   1        selectIdx = 0;
+  38   1        lcd1602_write_str(mainPage1, 0, 2);
+  39   1        lcd1602_write_str(mainPage2, 1, 10);
+  40   1        taskIdx = -2;
+  41   1      
+  42   1        while(1)
+  43   1        {
+  44   2          key_check();//按键检测
+  45   2          if(inputKey != 0)//有按键按下
+  46   2          {
+  47   3            key_handle(inputKey);//按键数值处理
+  48   3            inputKey = 0;    //键值清0
+  49   3          }
+  50   2          else
+  51   2          {
+  52   3            if(++cycleCount >= 15000)
+  53   3            {
+  54   4              cycleCount = 0;
+  55   4              task_handle();
+C51 COMPILER V9.56.0.0   MAIN                                                              12/16/2024 19:35:41 PAGE 2   
+
+  56   4            }
+  57   3          }
+  58   2        }
+  59   1      }
+  60          
+  61          void task_handle(void)
+  62          {
+  63   1        if(selectIdx == 0)
+  64   1        {
+  65   2          if(++taskIdx >= 3)
+  66   2          {
+  67   3            taskIdx = 1;
+  68   3          }
+  69   2          switch(taskIdx)
+  70   2          {
+  71   3            case -1:
+  72   3            case 1://温度转换
+  73   3              ds18b20_temp_conver();
+  74   3              break;
+  75   3            case 2://温度读取并处理
+  76   3              temp = ds18b20_read_temp();
+  77   3              temp_ctrl();
+  78   3              value_deal(temp);
+  79   3              lcd1602_write_str(strBuf, 1, 5);
+  80   3              uart_send_bytes(uartArry, 7);
+  81   3              break;
+  82   3          }
+  83   2        }
+  84   1      }
+  85          
+  86          
+  87          void key_handle(uchar value)
+  88          {
+  89   1        switch(value)
+  90   1        {
+  91   2          case 0x01:    //切换按钮
+  92   2            if(++selectIdx >= 3)
+  93   2            {
+  94   3              selectIdx = 0;
+  95   3            }
+  96   2            lcd1602_clear();
+  97   2            hide_cursor();//隐藏光标
+  98   2            digIdx = 1;//个位
+  99   2            switch(selectIdx)
+ 100   2            {
+ 101   3              case 0:  //实时监控状态
+ 102   3                lcd1602_write_str(mainPage1, 0, 2);
+ 103   3                lcd1602_write_str(mainPage2, 1, 10);
+ 104   3                break;
+ 105   3              case 1: //Lo设置
+ 106   3                lcd1602_write_str(LoSet, 0, 5);
+ 107   3                value_deal(LoLV);
+ 108   3                lcd1602_write_str(strBuf, 1, 5);
+ 109   3                show_cursor(1, 7);
+ 110   3                break;
+ 111   3              case 2: //Hi设置
+ 112   3                lcd1602_write_str(HiSet, 0, 5);
+ 113   3                value_deal(HiLV);
+ 114   3                lcd1602_write_str(strBuf, 1, 5);
+ 115   3                show_cursor(1, 7);
+ 116   3                break;
+ 117   3            }
+C51 COMPILER V9.56.0.0   MAIN                                                              12/16/2024 19:35:41 PAGE 3   
+
+ 118   2            break;
+ 119   2      
+ 120   2          case 0x02://+
+ 121   2            switch(selectIdx)
+ 122   2            {
+ 123   3              case 1: //Lo设置
+ 124   3                if(digIdx == 1)
+ 125   3                {
+ 126   4                  LoLV += 10;
+ 127   4                }
+ 128   3                else
+ 129   3                {
+ 130   4                  LoLV += 100;
+ 131   4                }
+ 132   3                if(LoLV >= 1000)
+ 133   3                {
+ 134   4                  LoLV = 1000;
+ 135   4                }
+ 136   3                value_deal(LoLV);
+ 137   3                lcd1602_write_str(strBuf, 1, 5);
+ 138   3                break;
+ 139   3              case 2: //Hi设置
+ 140   3                if(digIdx == 1)
+ 141   3                {
+ 142   4                  HiLV += 10;
+ 143   4                }
+ 144   3                else
+ 145   3                {
+ 146   4                  HiLV += 100;
+ 147   4                }
+ 148   3                if(HiLV >= 1200)
+ 149   3                {
+ 150   4                  HiLV = 1200;
+ 151   4                }
+ 152   3                value_deal(HiLV);
+ 153   3                lcd1602_write_str(strBuf, 1, 5);
+ 154   3                break;
+ 155   3            }
+ 156   2            if(selectIdx != 0)
+ 157   2            {
+ 158   3              show_cursor(1, 6 + digIdx);
+ 159   3            }
+ 160   2            break;
+ 161   2          case 0x04: //-
+ 162   2            switch(selectIdx)
+ 163   2            {
+ 164   3              case 1: //Lo设置
+ 165   3                if(digIdx == 1)
+ 166   3                {
+ 167   4                  LoLV -= 10;
+ 168   4                }
+ 169   3                else
+ 170   3                {
+ 171   4                  LoLV -= 100;
+ 172   4                }
+ 173   3                if(LoLV <= 0)
+ 174   3                {
+ 175   4                  LoLV = 0;
+ 176   4                }
+ 177   3                value_deal(LoLV);
+ 178   3                lcd1602_write_str(strBuf, 1, 5);
+ 179   3                break;
+C51 COMPILER V9.56.0.0   MAIN                                                              12/16/2024 19:35:41 PAGE 4   
+
+ 180   3              case 2: //Hi设置
+ 181   3                if(digIdx == 1)
+ 182   3                {
+ 183   4                  HiLV -= 10;
+ 184   4                }
+ 185   3                else
+ 186   3                {
+ 187   4                  HiLV -= 100;
+ 188   4                }
+ 189   3                if(HiLV <= 200)
+ 190   3                {
+ 191   4                  HiLV = 200;
+ 192   4                }
+ 193   3                value_deal(HiLV);
+ 194   3                lcd1602_write_str(strBuf, 1, 5);
+ 195   3                break;
+ 196   3            }
+ 197   2            if(selectIdx != 0)
+ 198   2            {
+ 199   3              show_cursor(1, 6 + digIdx);
+ 200   3            }
+ 201   2            break;
+ 202   2          case 0x08://位切换
+ 203   2            if(selectIdx != 0)
+ 204   2            {
+ 205   3              if(digIdx == 1)
+ 206   3              {
+ 207   4                digIdx = 0;
+ 208   4              }
+ 209   3              else
+ 210   3              {
+ 211   4                digIdx = 1;
+ 212   4              }
+ 213   3              show_cursor(1, 6 + digIdx);
+ 214   3            }
+ 215   2            break;
+ 216   2          default:
+ 217   2            break;
+ 218   2        }
+ 219   1      }
+ 220          
+ 221          void temp_ctrl(void)
+ 222          {
+ 223   1        if((temp <= LoLV) || (temp >= HiLV))//温度达到下限或上限
+ 224   1        {
+ 225   2          if(beep)
+ 226   2          {
+ 227   3            beep = 0;
+ 228   3          }
+ 229   2        }
+ 230   1        else//温度适中
+ 231   1        {
+ 232   2          if(!beep)
+ 233   2          {
+ 234   3            beep = 1;
+ 235   3          }
+ 236   2        }
+ 237   1      }
+ 238          
+ 239          //清除缓存
+ 240          void clear_strBuf(void)
+ 241          {
+C51 COMPILER V9.56.0.0   MAIN                                                              12/16/2024 19:35:41 PAGE 5   
+
+ 242   1        strBuf[0]='\0';
+ 243   1        strBuf[1]='\0';
+ 244   1        strBuf[2]='\0';
+ 245   1        strBuf[3]='\0';
+ 246   1        strBuf[4]='\0';
+ 247   1        strBuf[5]='\0';
+ 248   1      }
+ 249          
+ 250          
+ 251          //温度数据处理
+ 252          void value_deal(int num)
+ 253          {
+ 254   1        int t = num;
+ 255   1        clear_strBuf();
+ 256   1        strBuf[0] = t >= 1000 ? '1' : ' ';
+ 257   1        if(t < 0)
+ 258   1        {
+ 259   2          ds18b20_temp_change(&t);
+ 260   2          strBuf[0] = '-';
+ 261   2        }
+ 262   1        strBuf[1] = dig[t/100%10];
+ 263   1        strBuf[2] = dig[t/10%10];
+ 264   1        strBuf[3] = '.';
+ 265   1        strBuf[4] = dig[t%10];
+ 266   1      
+ 267   1        uartArry[0] = strBuf[0];
+ 268   1        uartArry[1] = strBuf[1];
+ 269   1        uartArry[2] = strBuf[2];
+ 270   1        uartArry[3] = strBuf[3];
+ 271   1        uartArry[4] = strBuf[4];
+ 272   1        uartArry[5] = '\r';
+ 273   1        uartArry[6] = '\n';
+ 274   1      }
+ 275          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    830    ----
+   CONSTANT SIZE    =     40    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     24       2
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
